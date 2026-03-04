@@ -323,7 +323,7 @@ function addMessage(role, content, reasoning = null) {
         </div>
         <div class="message-content">
             <div class="message-header">
-                <span class="sender-name">${isAI ? 'Penerima AI UITM' : 'Anda'}</span>
+                <span class="sender-name">${isAI ? 'AI Receptionist UITM' : 'Anda'}</span>
                 <span class="timestamp">${timestamp}</span>
             </div>
             <div class="message-text">

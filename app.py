@@ -1,6 +1,6 @@
 """
 UITM Receptionist AI - Flask Backend
-Penerima AI UITM - Backend Flask
+Pembantu AI UITM - Backend Flask
 """
 
 import os
