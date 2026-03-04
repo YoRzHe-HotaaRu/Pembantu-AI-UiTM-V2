@@ -24,6 +24,13 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'google/gemini-3.1-flash-lite-preview')
 
+# OpenAI TTS Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
+TTS_MODEL = os.getenv('TTS_MODEL', 'gpt-4o-mini-tts')
+TTS_VOICE = os.getenv('TTS_VOICE', 'alloy')
+TTS_FORMAT = os.getenv('TTS_FORMAT', 'wav')
+
 # RAG Configuration
 ENABLE_RAG = os.getenv('ENABLE_RAG', 'true').lower() == 'true'
 RAG_TOP_K = int(os.getenv('RAG_TOP_K', '5'))
@@ -499,6 +506,65 @@ def images_search():
 def serve_kb_assets(filename):
     """Serve knowledge base assets (images)"""
     return send_from_directory('knowledge_base/assets', filename)
+
+
+@app.route('/tts', methods=['POST'])
+def text_to_speech():
+    """
+    Convert text to speech using OpenAI TTS API
+    Returns audio file in WAV format
+    """
+    if not OPENAI_API_KEY:
+        return jsonify({'error': 'OpenAI API key not configured'}), 500
+    
+    data = request.get_json()
+    text = data.get('text', '')
+    
+    if not text:
+        return jsonify({'error': 'Text is required'}), 400
+    
+    # Limit text length to prevent API errors
+    if len(text) > 4000:
+        text = text[:4000] + '...'
+    
+    try:
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": TTS_MODEL,
+            "input": text,
+            "voice": TTS_VOICE,
+            "response_format": TTS_FORMAT
+        }
+        
+        response = requests.post(
+            OPENAI_TTS_URL,
+            headers=headers,
+            json=payload,
+            stream=True
+        )
+        
+        if response.status_code != 200:
+            error_data = response.json() if response.content else {'error': 'TTS request failed'}
+            return jsonify({'error': error_data.get('error', 'TTS request failed')}), response.status_code
+        
+        # Return audio stream
+        return Response(
+            response.iter_content(chunk_size=8192),
+            mimetype='audio/wav',
+            headers={
+                'Content-Disposition': 'inline; filename="speech.wav"',
+                'Cache-Control': 'no-cache'
+            }
+        )
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'TTS API request failed: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
 @app.errorhandler(404)

@@ -17,6 +17,7 @@ const state = {
     currentContent: '',
     ragUsed: false,
     structuredResponse: null, // For special responses like creator info
+    ttsEnabled: localStorage.getItem('uitm-tts-enabled') !== 'false', // Default: true
 
     // Audio recording state (for OpenRouter multimodal)
     audio: {
@@ -48,6 +49,7 @@ const elements = {
     themeDark: document.getElementById('themeDark'),
     microphoneSelect: document.getElementById('microphoneSelect'),
     testMicBtn: document.getElementById('testMicBtn'),
+    ttsToggle: document.getElementById('ttsToggle'),
     html: document.documentElement,
     
     // Panels
@@ -133,6 +135,9 @@ function setupEventListeners() {
     // Theme options in settings
     elements.themeLight.addEventListener('click', () => setTheme('light'));
     elements.themeDark.addEventListener('click', () => setTheme('dark'));
+
+    // TTS toggle
+    elements.ttsToggle.addEventListener('change', handleTTSToggle);
 
     // Microphone selection
     elements.microphoneSelect.addEventListener('change', handleMicrophoneSelect);
@@ -626,6 +631,9 @@ function finalizeResponse() {
         
         addMessage('assistant', response.content, null, false, imageData);
         
+        // Play TTS for the response
+        playTTS(response.content);
+        
         // Save to state
         state.messages.push({
             role: 'assistant',
@@ -647,6 +655,9 @@ function finalizeResponse() {
         const reasoning = state.currentReasoning || null;
         
         addMessage('assistant', messageContent, reasoning, state.ragUsed);
+        
+        // Play TTS for the response
+        playTTS(messageContent);
         
         // Save to state
         state.messages.push({
@@ -694,6 +705,19 @@ function addErrorMessage(message) {
 function initializeSettings() {
     // Update theme buttons state
     updateThemeButtons();
+    // Update TTS toggle state
+    updateTTSToggle();
+}
+
+function updateTTSToggle() {
+    if (elements.ttsToggle) {
+        elements.ttsToggle.checked = state.ttsEnabled;
+    }
+}
+
+function handleTTSToggle(e) {
+    state.ttsEnabled = e.target.checked;
+    localStorage.setItem('uitm-tts-enabled', state.ttsEnabled);
 }
 
 function toggleSettingsModal() {
@@ -704,6 +728,7 @@ function toggleSettingsModal() {
         // Refresh mic list when opening
         populateMicrophoneList();
         updateThemeButtons();
+        updateTTSToggle();
     }
 }
 
@@ -719,6 +744,58 @@ setTheme = function(theme) {
     originalSetTheme(theme);
     updateThemeButtons();
 };
+
+// ========================================
+// TTS MODULE (Text-to-Speech)
+// ========================================
+
+async function playTTS(text) {
+    // Skip if TTS is disabled
+    if (!state.ttsEnabled) return;
+    
+    // Skip if no text
+    if (!text || text.trim().length === 0) return;
+    
+    // Clean text for TTS (remove markdown formatting)
+    const cleanText = text
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/`(.*?)`/g, '$1')
+        .replace(/\n/g, ' ')
+        .substring(0, 4000); // Limit to 4000 chars
+    
+    try {
+        const response = await fetch('/tts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: cleanText })
+        });
+        
+        if (!response.ok) {
+            console.error('TTS request failed:', response.status);
+            return;
+        }
+        
+        // Get audio blob and play
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        
+        audio.play().catch(err => {
+            console.error('Audio playback failed:', err);
+        });
+        
+        // Cleanup URL after playback
+        audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+        };
+        
+    } catch (error) {
+        console.error('TTS error:', error);
+    }
+}
 
 // ========================================
 // AUDIO DEVICES MODULE
