@@ -5,6 +5,7 @@ Sistem chatbot AI rasmi untuk Universiti Teknologi MARA (UITM) yang membantu pel
 ## Ciri-Ciri Utama
 
 - 🤖 **Integrasi OpenRouter AI** - menggunakan model dengan keupayaan reasoning
+- 📚 **Sistem RAG (Retrieval-Augmented Generation)** - capai maklumat dari pangkalan pengetahuan
 - 🎨 **Reka bentuk Geometri Sweden** - gaya moden dengan tepi tajam (tiada sudut bulat)
 - 🌓 **Tema Cerah & Gelap** - boleh ditukar mengikut pilihan pengguna
 - 📱 **Responsif** - susun atur desktop dan mudah alih dengan panel beralih

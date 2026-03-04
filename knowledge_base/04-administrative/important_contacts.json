@@ -1,0 +1,63 @@
+{
+  "title": "Hubungan Penting UITM",
+  "description": "Senarai nombor telefon dan emel penting untuk pelajar dan pelawat",
+  "last_updated": "2025-01-15",
+  "contacts": [
+    {
+      "department": "Bahagian Kemasukan",
+      "purpose": "Permohonan kemasukan pelajar",
+      "phone": "03-5544 2000",
+      "email": "admissions@uitm.edu.my",
+      "location": "Bangunan Canselor"
+    },
+    {
+      "department": "Pejabat Bendahari",
+      "purpose": "Yuran, bantuan kewangan, pinjaman",
+      "phone": "03-5544 3111",
+      "email": "bendahari@uitm.edu.my",
+      "location": "Bangunan Pentadbiran"
+    },
+    {
+      "department": "Pusat Perkhidmatan Pelajar",
+      "purpose": "Hal ehwal pelajar, kokurikulum, disiplin",
+      "phone": "03-5544 3777",
+      "email": "hepp@uitm.edu.my",
+      "location": "Bangunan HEPA"
+    },
+    {
+      "department": "Perpustakaan Tun Abdul Razak (PTAR)",
+      "purpose": "Pinjaman buku, sumber rujukan",
+      "phone": "03-5544 3740",
+      "email": "ptar@uitm.edu.my",
+      "location": "Bangunan PTAR"
+    },
+    {
+      "department": "Pusat Kesihatan",
+      "purpose": "Perkhidmatan kesihatan pelajar",
+      "phone": "03-5544 3535",
+      "email": "health@uitm.edu.my",
+      "location": "Bangunan HEPA"
+    },
+    {
+      "department": "Unit Keselamatan",
+      "purpose": "Keselamatan kampus, kecemasan",
+      "phone": "03-5544 2999",
+      "email": "security@uitm.edu.my",
+      "location": "Ibu Pejabat Keselamatan"
+    },
+    {
+      "department": "Pusat Teknologi Maklumat (PTM)",
+      "purpose": "IT, rangkaian, emel pelajar",
+      "phone": "03-5544 4444",
+      "email": "ptm@uitm.edu.my",
+      "location": "Bangunan PTM"
+    },
+    {
+      "department": "Hal Ehwal Alumni",
+      "purpose": "Graduan, alumni, networking",
+      "phone": "03-5544 2888",
+      "email": "alumni@uitm.edu.my",
+      "location": "Bangunan Canselor"
+    }
+  ]
+}

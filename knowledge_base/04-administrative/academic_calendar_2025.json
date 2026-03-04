@@ -1,0 +1,113 @@
+{
+  "title": "Kalendar Akademik Sesi 2025/2026",
+  "description": "Tarikh penting akademik untuk sesi 2025/2026",
+  "academic_year": "2025/2026",
+  "sessions": [
+    {
+      "session": "2025/2026 - Sesi 1",
+      "period": "September 2025 - Februari 2026",
+      "events": [
+        {
+          "event": "Pendaftaran Pelajar Baharu",
+          "date": "8-12 September 2025"
+        },
+        {
+          "event": "Minggu Suai Kenal",
+          "date": "15-19 September 2025"
+        },
+        {
+          "event": "Kuliah Bermula",
+          "date": "22 September 2025"
+        },
+        {
+          "event": "Cuti Deepavali",
+          "date": "20-21 Oktober 2025"
+        },
+        {
+          "event": "Minggu Ulang Kaji",
+          "date": "24 November - 28 November 2025"
+        },
+        {
+          "event": "Peperiksaan Akhir",
+          "date": "1-19 Disember 2025"
+        },
+        {
+          "event": "Cuti Semester",
+          "date": "22 Disember 2025 - 16 Januari 2026"
+        },
+        {
+          "event": "Keputusan Peperiksaan",
+          "date": "16 Januari 2026"
+        }
+      ]
+    },
+    {
+      "session": "2025/2026 - Sesi 2",
+      "period": "Februari 2026 - Julai 2026",
+      "events": [
+        {
+          "event": "Pendaftaran Pelajar",
+          "date": "9-13 Februari 2026"
+        },
+        {
+          "event": "Kuliah Bermula",
+          "date": "16 Februari 2026"
+        },
+        {
+          "event": "Cuti Pertengahan Semester",
+          "date": "30 Mac - 5 April 2026"
+        },
+        {
+          "event": "Hari Keputeraan Sultan Selangor",
+          "date": "11 Disember 2025 (cuti gantian 13 April 2026)"
+        },
+        {
+          "event": "Hari Pekerja",
+          "date": "1 Mei 2026"
+        },
+        {
+          "event": "Minggu Ulang Kaji",
+          "date": "4-8 Mei 2026"
+        },
+        {
+          "event": "Peperiksaan Akhir",
+          "date": "11-29 Mei 2026"
+        },
+        {
+          "event": "Cuti Semester",
+          "date": "1 Jun - 17 Julai 2026"
+        },
+        {
+          "event": "Keputusan Peperiksaan",
+          "date": "17 Julai 2026"
+        }
+      ]
+    }
+  ],
+  "public_holidays": [
+    {
+      "holiday": "Hari Kebangsaan",
+      "date": "31 Ogos 2025"
+    },
+    {
+      "holiday": "Hari Malaysia",
+      "date": "16 September 2025"
+    },
+    {
+      "holiday": "Maulidur Rasul",
+      "date": "5 Oktober 2025"
+    },
+    {
+      "holiday": "Hari Raya Aidilfitri",
+      "date": "31 Mac - 1 April 2026"
+    },
+    {
+      "holiday": "Hari Raya Aidiladha",
+      "date": "8 Jun 2026"
+    },
+    {
+      "holiday": "Awal Muharam",
+      "date": "18 Julai 2026"
+    }
+  ]
+}

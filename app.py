@@ -1,13 +1,17 @@
 """
-UITM Receptionist AI - Flask Backend
-Pembantu AI UITM - Backend Flask
+UITM Receptionist AI - Flask Backend with RAG System
+Pembantu AI UITM - Backend Flask dengan Sistem RAG
 """
 
 import os
 import json
 import requests
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_from_directory
 from dotenv import load_dotenv
+
+# Import RAG system
+from rag import RAGManager
+from rag.image_handler import ImageHandler
 
 # Load environment variables
 load_dotenv()
@@ -20,8 +24,43 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'google/gemini-3.1-flash-lite-preview')
 
-# System prompt for UITM Receptionist
-SYSTEM_PROMPT = """Anda adalah Pembantu AI rasmi Universiti Teknologi MARA (UITM), Malaysia.
+# RAG Configuration
+ENABLE_RAG = os.getenv('ENABLE_RAG', 'true').lower() == 'true'
+RAG_TOP_K = int(os.getenv('RAG_TOP_K', '5'))
+RAG_USE_ADVANCED = os.getenv('RAG_USE_ADVANCED', 'false').lower() == 'true'
+
+# Initialize RAG System
+rag_manager = None
+image_handler = None
+
+if ENABLE_RAG:
+    try:
+        print("\n" + "="*60)
+        print("Initializing RAG System...")
+        print("="*60)
+        
+        # Use lightweight mode by default (no heavy embeddings)
+        rag_manager = RAGManager(use_advanced=RAG_USE_ADVANCED)
+        rag_manager.initialize()
+        
+        # Initialize image handler (lightweight)
+        try:
+            image_handler = ImageHandler()
+            image_handler.load_images()
+        except Exception as e:
+            print(f"Note: Image handler not initialized: {e}")
+        
+        print("\n✓ RAG System ready!")
+        print("="*60 + "\n")
+    except Exception as e:
+        print(f"\n⚠ Warning: Could not initialize RAG system: {e}")
+        print("Continuing without RAG functionality...\n")
+        import traceback
+        traceback.print_exc()
+        rag_manager = None
+
+# Base system prompt for UITM Receptionist
+BASE_SYSTEM_PROMPT = """Anda adalah Pembantu AI rasmi Universiti Teknologi MARA (UITM), Malaysia.
 
 Peranan anda:
 1. Memberikan maklumat tepat dan mesra tentang UITM
@@ -45,16 +84,51 @@ Maklumat Pembangun:
 
 Sentiasa berikan jawapan yang membantu, tepat, dan dalam Bahasa Melayu (Malay). Jangan gunakan Bahasa Indonesia (Indonesian)"""
 
+RAG_INSTRUCTIONS = """
+
+[ARAHAN RAG]
+Anda mempunyai akses kepada pangkalan pengetahuan UITM. Gunakan maklumat yang diberikan dalam [KONTEKS] di bawah untuk menjawab soalan pengguna.
+
+Garis panduan penggunaan konteks:
+1. Gunakan maklumat daripada [KONTEKS] untuk menjawab soalan dengan tepat
+2. Jika maklumat tidak mencukupi dalam konteks, gunakan pengetahuan umum anda tentang UITM
+3. Jika anda tidak pasti, nyatakan dengan jujur dan cadangkan pengguna menghubungi pejabat berkaitan
+4. Rujuk sumber dokumen jika menggunakan maklumat spesifik daripada konteks
+5. Pastikan jawapan adalah dalam Bahasa Melayu yang betul
+
+[KONTEKS]
+{retrieved_context}
+[/KONTEKS]
+"""
+
+
+def get_last_user_query(messages):
+    """Extract the last user message from the conversation"""
+    for msg in reversed(messages):
+        if msg.get('role') == 'user':
+            return msg.get('content', '')
+    return ''
+
+
+def build_system_prompt(retrieved_context=''):
+    """Build the complete system prompt with optional RAG context"""
+    if retrieved_context and ENABLE_RAG:
+        return BASE_SYSTEM_PROMPT + RAG_INSTRUCTIONS.format(retrieved_context=retrieved_context)
+    return BASE_SYSTEM_PROMPT
+
+
 @app.route('/')
 def index():
     """Render the main chat interface"""
     return render_template('index.html')
+
 
 @app.route('/chat', methods=['POST'])
 def chat():
     """
     Handle chat requests with OpenRouter API
     Supports streaming for real-time reasoning display
+    Integrates with RAG system for context retrieval
     """
     data = request.get_json()
     messages = data.get('messages', [])
@@ -64,8 +138,29 @@ def chat():
     if not OPENROUTER_API_KEY:
         return jsonify({'error': 'OpenRouter API key not configured'}), 500
     
+    # Get the user's last query for RAG
+    user_query = get_last_user_query(messages)
+    
+    # Retrieve context using RAG if enabled
+    retrieved_context = ''
+    sources = []
+    if ENABLE_RAG and rag_manager and user_query:
+        try:
+            rag_result = rag_manager.query(
+                query_text=user_query,
+                top_k=RAG_TOP_K,
+                format_context=True
+            )
+            retrieved_context = rag_result.get('context', '')
+            sources = rag_result.get('sources', [])
+        except Exception as e:
+            print(f"RAG query error: {e}")
+    
+    # Build system prompt with retrieved context
+    system_prompt = build_system_prompt(retrieved_context)
+    
     # Prepare messages with system prompt
-    full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    full_messages = [{"role": "system", "content": system_prompt}] + messages
     
     # Prepare API request
     headers = {
@@ -99,6 +194,10 @@ def chat():
                         if decoded_line.startswith('data: '):
                             data_str = decoded_line[6:]
                             if data_str == '[DONE]':
+                                # Send sources information if available
+                                if sources:
+                                    sources_data = {'sources': sources}
+                                    yield f'data: {json.dumps({"sources": sources_data})}\n\n'
                                 yield 'data: [DONE]\n\n'
                                 break
                             try:
@@ -127,11 +226,17 @@ def chat():
             
             if 'choices' in response_data and len(response_data['choices']) > 0:
                 message = response_data['choices'][0]['message']
-                return jsonify({
+                result = {
                     'content': message.get('content', ''),
                     'reasoning': message.get('reasoning', ''),
                     'role': 'assistant'
-                })
+                }
+                
+                # Include sources if available
+                if sources:
+                    result['sources'] = sources
+                
+                return jsonify(result)
             else:
                 return jsonify({'error': 'Invalid response from OpenRouter'}), 500
                 
@@ -139,6 +244,7 @@ def chat():
         return jsonify({'error': f'API request failed: {str(e)}'}), 500
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 
 @app.route('/models', methods=['GET'])
 def get_models():
@@ -159,13 +265,138 @@ def get_models():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+# RAG API Endpoints
+
+@app.route('/api/knowledge/search', methods=['GET'])
+def knowledge_search():
+    """Search the knowledge base"""
+    if not rag_manager:
+        return jsonify({'error': 'RAG system not initialized'}), 503
+    
+    query = request.args.get('q', '')
+    top_k = request.args.get('top_k', RAG_TOP_K, type=int)
+    category = request.args.get('category', None)
+    
+    if not query:
+        return jsonify({'error': 'Query parameter "q" is required'}), 400
+    
+    try:
+        result = rag_manager.query(
+            query_text=query,
+            top_k=top_k,
+            category_filter=category,
+            format_context=False
+        )
+        
+        # Format chunks for response
+        chunks_data = []
+        for chunk in result.get('chunks', []):
+            chunks_data.append({
+                'id': chunk.id,
+                'content': chunk.content[:500] + '...' if len(chunk.content) > 500 else chunk.content,
+                'doc_title': chunk.doc_title,
+                'category': chunk.category,
+                'relevance': round(chunk.combined_score, 3)
+            })
+        
+        return jsonify({
+            'query': query,
+            'results': chunks_data,
+            'total': len(chunks_data)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/knowledge/categories', methods=['GET'])
+def knowledge_categories():
+    """Get list of available categories"""
+    if not rag_manager:
+        return jsonify({'error': 'RAG system not initialized'}), 503
+    
+    try:
+        categories = rag_manager.get_categories()
+        return jsonify({'categories': categories})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/knowledge/stats', methods=['GET'])
+def knowledge_stats():
+    """Get statistics about the knowledge base"""
+    if not rag_manager:
+        return jsonify({'error': 'RAG system not initialized'}), 503
+    
+    try:
+        stats = rag_manager.get_stats()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/knowledge/reload', methods=['POST'])
+def knowledge_reload():
+    """Reload and reindex the knowledge base"""
+    if not rag_manager:
+        return jsonify({'error': 'RAG system not initialized'}), 503
+    
+    try:
+        rag_manager.reload()
+        return jsonify({
+            'status': 'success',
+            'message': 'Knowledge base reloaded successfully'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/images/search', methods=['GET'])
+def images_search():
+    """Search for images in the knowledge base"""
+    if not image_handler:
+        return jsonify({'error': 'Image handler not initialized'}), 503
+    
+    query = request.args.get('q', '')
+    limit = request.args.get('limit', 5, type=int)
+    
+    if not query:
+        return jsonify({'error': 'Query parameter "q" is required'}), 400
+    
+    try:
+        images = image_handler.search_images(query, limit)
+        return jsonify({
+            'query': query,
+            'images': [
+                {
+                    'id': img.id,
+                    'filename': img.filename,
+                    'description': img.description,
+                    'category': img.category,
+                    'url': img.url_path
+                }
+                for img in images
+            ]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/static/kb_assets/<path:filename>')
+def serve_kb_assets(filename):
+    """Serve knowledge base assets (images)"""
+    return send_from_directory('knowledge_base/assets', filename)
+
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'Not found'}), 404
 
+
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
