@@ -1020,7 +1020,7 @@ p {
     .header-title {
         order: 3;
         width: 100%;
-        text-align: left;
+        text-align: center;
     }
     
     .theme-toggle {
