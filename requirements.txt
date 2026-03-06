@@ -2,6 +2,7 @@ flask==3.0.0
 requests==2.31.0
 python-dotenv==1.0.0
 gunicorn==21.2.0
+websockets>=12.0
 
 # RAG System - Optional Advanced Dependencies
 # Uncomment below ONLY if using Advanced Mode (requires 8GB+ RAM)

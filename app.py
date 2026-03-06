@@ -24,12 +24,11 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'google/gemini-3.1-flash-lite-preview')
 
-# OpenAI TTS Configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
-TTS_MODEL = os.getenv('TTS_MODEL', 'gpt-4o-mini-tts')
-TTS_VOICE = os.getenv('TTS_VOICE', 'alloy')
-TTS_FORMAT = os.getenv('TTS_FORMAT', 'wav')
+# Minimax TTS Configuration
+MINIMAX_API_KEY = os.getenv('MINIMAX_API_KEY')
+MINIMAX_TTS_MODEL = os.getenv('MINIMAX_TTS_MODEL', 'speech-2.8-turbo')
+MINIMAX_TTS_VOICE = os.getenv('MINIMAX_TTS_VOICE', 'Malay_male_1_v1')
+MINIMAX_TTS_LANGUAGE = os.getenv('MINIMAX_TTS_LANGUAGE', 'Malay')
 
 # RAG Configuration
 ENABLE_RAG = os.getenv('ENABLE_RAG', 'true').lower() == 'true'
@@ -511,11 +510,11 @@ def serve_kb_assets(filename):
 @app.route('/tts', methods=['POST'])
 def text_to_speech():
     """
-    Convert text to speech using OpenAI TTS API
-    Returns audio file in WAV format
+    Convert text to speech using Minimax TTS API
+    Returns audio file in MP3 format with Malay male voice
     """
-    if not OPENAI_API_KEY:
-        return jsonify({'error': 'OpenAI API key not configured'}), 500
+    if not MINIMAX_API_KEY:
+        return jsonify({'error': 'Minimax API key not configured'}), 500
     
     data = request.get_json()
     text = data.get('text', '')
@@ -523,47 +522,37 @@ def text_to_speech():
     if not text:
         return jsonify({'error': 'Text is required'}), 400
     
-    # Limit text length to prevent API errors
-    if len(text) > 4000:
-        text = text[:4000] + '...'
+    # Limit text length to prevent API errors (Minimax limit: 10,000 characters)
+    if len(text) > 10000:
+        text = text[:9997] + '...'
     
     try:
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        from minimax_tts import MinimaxTTS, MinimaxTTSError
         
-        payload = {
-            "model": TTS_MODEL,
-            "input": text,
-            "voice": TTS_VOICE,
-            "response_format": TTS_FORMAT
-        }
-        
-        response = requests.post(
-            OPENAI_TTS_URL,
-            headers=headers,
-            json=payload,
-            stream=True
+        tts = MinimaxTTS(
+            api_key=MINIMAX_API_KEY,
+            model=MINIMAX_TTS_MODEL,
+            voice_id=MINIMAX_TTS_VOICE,
+            language_boost=MINIMAX_TTS_LANGUAGE
         )
         
-        if response.status_code != 200:
-            error_data = response.json() if response.content else {'error': 'TTS request failed'}
-            return jsonify({'error': error_data.get('error', 'TTS request failed')}), response.status_code
+        audio_bytes = tts.generate_audio(text)
         
-        # Return audio stream
+        # Return audio as MP3
         return Response(
-            response.iter_content(chunk_size=8192),
-            mimetype='audio/wav',
+            audio_bytes,
+            mimetype='audio/mpeg',
             headers={
-                'Content-Disposition': 'inline; filename="speech.wav"',
+                'Content-Disposition': 'inline; filename="speech.mp3"',
                 'Cache-Control': 'no-cache'
             }
         )
         
-    except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'TTS API request failed: {str(e)}'}), 500
+    except MinimaxTTSError as e:
+        print(f"Minimax TTS error: {e.message}")
+        return jsonify({'error': f'TTS error: {e.message}'}), 500
     except Exception as e:
+        print(f"TTS unexpected error: {str(e)}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
