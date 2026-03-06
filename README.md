@@ -12,6 +12,7 @@ Sistem chatbot AI rasmi untuk Universiti Teknologi MARA (UiTM) yang membantu pel
 - 💭 **Paparan Reasoning Langsung** - melihat proses pemikiran AI dalam masa nyata
 - ⚡ **Akses Pantas** - soalan lazim dalam kategori teratur
 - 🗣️ **Bahasa Melayu** - antara muka sepenuhnya dalam Bahasa Melayu
+- 🎭 **Integrasi VTube Studio** - sokongan lip sync untuk avatar Live2D
 
 ## Keperluan
 
@@ -87,9 +88,20 @@ uitm-chatbot/
 │       └── app.js          # Logik frontend
 ├── templates/
 │   └── index.html          # Antara muka utama
+├── vts/                    # Modul VTube Studio
+│   ├── __init__.py         # Eksport modul
+│   ├── connector.py        # Sambungan WebSocket VTS
+│   ├── audio_converter.py  # Penukar MP3 ke WAV
+│   ├── lip_sync.py         # Analisis dan main lip sync
+│   └── expressions.py      # Pemetaan emosi ke ekspresi
+├── rag/                    # Sistem RAG
+│   └── ...                 # Modul RAG
+├── knowledge_base/         # Pangkalan pengetahuan
+│   └── ...                 # Fail markdown dan JSON
 ├── .env                    # Pemboleh ubah persekitaran
 ├── .env.example            # Contoh konfigurasi
 ├── app.py                  # Aplikasi Flask
+├── minimax_tts.py          # Modul TTS Minimax
 ├── requirements.txt        # Kebergantungan Python
 └── README.md               # Dokumentasi
 ```
@@ -157,6 +169,71 @@ Edit pemboleh ubah `SYSTEM_PROMPT` dalam `app.py` untuk menukar personaliti atau
 
 ### Masalah: Streaming tidak berfungsi
 **Penyelesaian**: Semak sambungan internet dan pastikan API key sah
+
+## Integrasi VTube Studio
+
+Sistem ini menyokong integrasi dengan VTube Studio untuk menggerakkan mulut avatar Live2D mengikut suara TTS.
+
+### Keperluan VTS
+
+1. **VTube Studio** - Pasang dari Steam (percuma)
+2. **ffmpeg** - Diperlukan untuk penukaran audio MP3 ke WAV
+   - Windows: Muat turun dari https://ffmpeg.org dan tambah ke PATH
+   - Linux: `sudo apt install ffmpeg`
+   - Mac: `brew install ffmpeg`
+
+### Konfigurasi VTS
+
+1. Buka VTube Studio
+2. Pergi ke **Settings → General Settings**
+3. Aktifkan **"Start API"** dan pastikan port adalah 8001
+4. Tambah konfigurasi berikut ke fail `.env`:
+
+```env
+# VTube Studio Integration
+VTS_ENABLED=true
+VTS_HOST=localhost
+VTS_PORT=8001
+VTS_AUTO_RECONNECT=true
+VTS_RECONNECT_INTERVAL=5.0
+```
+
+### Menggunakan VTS
+
+1. Buka tetapan (⚙️) dalam aplikasi
+2. Togol **"Sambung ke VTube Studio"** kepada ON
+3. Klik "Allow" dalam dialog VTube Studio apabila diminta
+4. Status akan bertukar kepada "Disambung" (hijau)
+
+### Cara Kerja
+
+1. Apabila TTS diaktifkan, sistem menjana audio MP3
+2. Audio ditukar ke WAV untuk analisis
+3. Amplitud audio dianalisis untuk menghasilkan data lip sync
+4. Data lip sync dihantar ke VTube Studio melalui WebSocket API
+5. Parameter `MouthOpen` dikemas kini dalam masa nyata
+
+### Parameter VTS
+
+- **MouthOpen** - Parameter khusus untuk bukaan mulut (0.0 - 1.0)
+- **Expressions** - Tag emosi dalam teks AI (contoh: `[HAPPY]`, `[SAD]`)
+
+### Penyelesaian Masalah VTS
+
+#### Masalah: "VTS connector not initialized"
+**Penyelesaian**: Pastikan `VTS_ENABLED=true` dalam `.env` dan restart aplikasi
+
+#### Masalah: "Connection refused"
+**Penyelesaian**:
+- Pastikan VTube Studio sedang berjalan
+- Semak API diaktifkan dalam VTS Settings
+- Sahkan port 8001 tidak digunakan oleh aplikasi lain
+
+#### Masalah: Mulut avatar tidak bergerak
+**Penyelesaian**:
+- Pastikan model Live2D mempunyai parameter `MouthOpen`
+- Semak sambungan VTS dalam tetapan
+- Pastikan TTS diaktifkan
 
 ## Keselamatan
 

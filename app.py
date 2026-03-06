@@ -5,13 +5,19 @@ Pembantu AI UiTM - Backend Flask dengan Sistem RAG
 
 import os
 import json
+import base64
 import requests
+import asyncio
+import threading
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_from_directory
 from dotenv import load_dotenv
 
 # Import RAG system
 from rag import RAGManager
 from rag.image_handler import ImageHandler
+
+# Import VTS system
+from vts import VTSConnector, LipSyncAnalyzer, ExpressionMapper, AudioConverter
 
 # Load environment variables
 load_dotenv()
@@ -34,6 +40,13 @@ MINIMAX_TTS_LANGUAGE = os.getenv('MINIMAX_TTS_LANGUAGE', 'Malay')
 ENABLE_RAG = os.getenv('ENABLE_RAG', 'true').lower() == 'true'
 RAG_TOP_K = int(os.getenv('RAG_TOP_K', '5'))
 RAG_USE_ADVANCED = os.getenv('RAG_USE_ADVANCED', 'false').lower() == 'true'
+
+# VTube Studio Configuration
+VTS_ENABLED = os.getenv('VTS_ENABLED', 'false').lower() == 'true'
+VTS_HOST = os.getenv('VTS_HOST', 'localhost')
+VTS_PORT = int(os.getenv('VTS_PORT', '8001'))
+VTS_AUTO_RECONNECT = os.getenv('VTS_AUTO_RECONNECT', 'true').lower() == 'true'
+VTS_RECONNECT_INTERVAL = float(os.getenv('VTS_RECONNECT_INTERVAL', '5.0'))
 
 # Initialize RAG System
 rag_manager = None
@@ -64,6 +77,71 @@ if ENABLE_RAG:
         import traceback
         traceback.print_exc()
         rag_manager = None
+
+# Initialize VTS System
+vts_connector = None
+vts_lip_sync = None
+vts_expression_mapper = None
+vts_audio_converter = None
+vts_loop = None  # Persistent event loop for VTS
+
+def run_in_vts_loop(coro):
+    """
+    Run a coroutine in the VTS event loop.
+    This ensures all VTS operations use the same event loop.
+    """
+    global vts_loop
+    if vts_loop is None or not vts_loop.is_running():
+        print("[VTS] Error: VTS loop not running")
+        return None
+    print(f"[VTS] Running coroutine in VTS loop: {coro}")
+    future = asyncio.run_coroutine_threadsafe(coro, vts_loop)
+    result = future.result(timeout=30)  # 30 second timeout
+    print(f"[VTS] Coroutine completed")
+    return result
+
+def vts_loop_thread():
+    """Run the VTS event loop in a background thread."""
+    global vts_loop
+    vts_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(vts_loop)
+    vts_loop.run_forever()
+
+if VTS_ENABLED:
+    try:
+        print("\n" + "="*60)
+        print("Initializing VTube Studio Integration...")
+        print("="*60)
+        
+        # Start the VTS event loop in a background thread
+        vts_thread = threading.Thread(target=vts_loop_thread, daemon=True)
+        vts_thread.start()
+        print("[VTS] Started background event loop thread")
+        
+        # Wait for loop to be ready
+        import time
+        while vts_loop is None:
+            time.sleep(0.1)
+        
+        # Initialize VTS components
+        vts_connector = VTSConnector(
+            host=VTS_HOST,
+            port=VTS_PORT,
+            auto_reconnect=VTS_AUTO_RECONNECT,
+            reconnect_interval=VTS_RECONNECT_INTERVAL
+        )
+        vts_lip_sync = LipSyncAnalyzer()
+        vts_expression_mapper = ExpressionMapper()
+        vts_audio_converter = AudioConverter()
+        
+        print("\n✓ VTS Integration ready! (Will connect on first use)")
+        print("="*60 + "\n")
+    except Exception as e:
+        print(f"\n⚠ Warning: Could not initialize VTS system: {e}")
+        print("Continuing without VTS functionality...\n")
+        import traceback
+        traceback.print_exc()
+        vts_connector = None
 
 # Base system prompt for UiTM Receptionist
 BASE_SYSTEM_PROMPT = """Anda adalah Pembantu AI rasmi Universiti Teknologi MARA (UiTM), Malaysia.
@@ -512,12 +590,14 @@ def text_to_speech():
     """
     Convert text to speech using Minimax TTS API
     Returns audio file in MP3 format with Malay male voice
+    Optionally includes lip sync data if VTS is enabled
     """
     if not MINIMAX_API_KEY:
         return jsonify({'error': 'Minimax API key not configured'}), 500
     
     data = request.get_json()
     text = data.get('text', '')
+    include_lip_sync = data.get('include_lip_sync', False) and VTS_ENABLED
     
     if not text:
         return jsonify({'error': 'Text is required'}), 400
@@ -538,15 +618,60 @@ def text_to_speech():
         
         audio_bytes = tts.generate_audio(text)
         
-        # Return audio as MP3
-        return Response(
-            audio_bytes,
-            mimetype='audio/mpeg',
-            headers={
-                'Content-Disposition': 'inline; filename="speech.mp3"',
-                'Cache-Control': 'no-cache'
-            }
-        )
+        # If lip sync is not requested or VTS is disabled, return audio only
+        if not include_lip_sync:
+            return Response(
+                audio_bytes,
+                mimetype='audio/mpeg',
+                headers={
+                    'Content-Disposition': 'inline; filename="speech.mp3"',
+                    'Cache-Control': 'no-cache'
+                }
+            )
+        
+        # Generate lip sync data
+        lip_sync_data = []
+        duration = 0.0
+        expression = None
+        
+        try:
+            # Convert MP3 to WAV for analysis
+            if vts_audio_converter and vts_audio_converter.is_available:
+                print(f"[TTS] Converting MP3 to WAV for lip sync analysis...")
+                wav_bytes = vts_audio_converter.convert_mp3_to_wav(audio_bytes)
+                
+                if wav_bytes:
+                    # Analyze WAV for lip sync
+                    print(f"[TTS] Analyzing WAV for lip sync ({len(wav_bytes)} bytes)...")
+                    lip_sync_data = vts_lip_sync.analyze_wav_bytes(wav_bytes)
+                    print(f"[TTS] Generated {len(lip_sync_data)} lip sync frames")
+                    
+                    # Get audio duration
+                    duration = vts_audio_converter.get_audio_duration(audio_bytes, 'mp3') or 0.0
+                    
+                    # Extract emotion from text
+                    if vts_expression_mapper:
+                        expression = vts_expression_mapper.extract_emotion(text)
+                else:
+                    print(f"[TTS] WAV conversion returned empty")
+            else:
+                print(f"[TTS] Audio converter not available (is_available={vts_audio_converter.is_available if vts_audio_converter else 'None'})")
+        except Exception as e:
+            print(f"[TTS] Lip sync generation error: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Return JSON with audio and lip sync data
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        
+        return jsonify({
+            'audio': audio_base64,
+            'audio_format': 'mp3',
+            'lip_sync': lip_sync_data,
+            'duration': duration,
+            'expression': expression,
+            'vts_enabled': VTS_ENABLED
+        })
         
     except MinimaxTTSError as e:
         print(f"Minimax TTS error: {e.message}")
@@ -554,6 +679,140 @@ def text_to_speech():
     except Exception as e:
         print(f"TTS unexpected error: {str(e)}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@app.route('/vts/status', methods=['GET'])
+def vts_status():
+    """
+    Get VTube Studio connection status
+    """
+    if not VTS_ENABLED:
+        return jsonify({
+            'enabled': False,
+            'connected': False,
+            'message': 'VTS integration is disabled'
+        })
+    
+    connected = vts_connector is not None and vts_connector.is_connected
+    
+    return jsonify({
+        'enabled': True,
+        'connected': connected,
+        'message': 'Connected' if connected else 'Not connected'
+    })
+
+
+@app.route('/vts/connect', methods=['POST'])
+def vts_connect():
+    """
+    Connect to VTube Studio
+    """
+    if not VTS_ENABLED:
+        return jsonify({'error': 'VTS integration is disabled'}), 400
+    
+    if not vts_connector:
+        return jsonify({'error': 'VTS connector not initialized'}), 500
+    
+    try:
+        # Run async connect in the persistent VTS loop
+        success = run_in_vts_loop(vts_connector.connect())
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Connected to VTube Studio'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to connect to VTube Studio'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/vts/disconnect', methods=['POST'])
+def vts_disconnect():
+    """
+    Disconnect from VTube Studio
+    """
+    if not VTS_ENABLED:
+        return jsonify({'error': 'VTS integration is disabled'}), 400
+    
+    if not vts_connector:
+        return jsonify({'error': 'VTS connector not initialized'}), 500
+    
+    try:
+        run_in_vts_loop(vts_connector.disconnect())
+        
+        return jsonify({
+            'success': True,
+            'message': 'Disconnected from VTube Studio'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/vts/set_mouth', methods=['POST'])
+def vts_set_mouth():
+    """
+    Set mouth open value in VTube Studio
+    Called by frontend during TTS playback for lip sync
+    """
+    if not VTS_ENABLED:
+        return jsonify({'error': 'VTS integration is disabled'}), 400
+    
+    if not vts_connector or not vts_connector.is_connected:
+        return jsonify({'error': 'VTS not connected'}), 400
+    
+    data = request.get_json()
+    mouth_value = data.get('value', 0.0)
+    
+    try:
+        # Set the mouth parameter
+        params = vts_lip_sync.get_mouth_parameters(mouth_value)
+        success = run_in_vts_loop(vts_connector.set_parameters(params))
+        success = loop.run_until_complete(vts_connector.set_parameters(params))
+        loop.close()
+        
+        return jsonify({'success': success})
+        
+    except Exception as e:
+        print(f"[VTS] Error setting mouth: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/vts/play_lip_sync', methods=['POST'])
+def vts_play_lip_sync():
+    """
+    Play lip sync data directly on VTS
+    Frontend sends the lip sync data and backend plays it in real-time
+    """
+    if not VTS_ENABLED:
+        return jsonify({'error': 'VTS integration is disabled'}), 400
+    
+    if not vts_connector or not vts_connector.is_connected:
+        return jsonify({'error': 'VTS not connected'}), 400
+    
+    data = request.get_json()
+    lip_sync_data = data.get('lip_sync', [])
+    
+    if not lip_sync_data:
+        return jsonify({'success': True, 'message': 'No lip sync data'})
+    
+    try:
+        from vts.lip_sync import LipSyncPlayer
+        
+        player = LipSyncPlayer(vts_lip_sync)
+        run_in_vts_loop(player.play_lip_sync(vts_connector, lip_sync_data))
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"[VTS] Error playing lip sync: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.errorhandler(404)

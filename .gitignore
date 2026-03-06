@@ -171,3 +171,5 @@ pids
 
 # Plans directory (internal documentation)
 plans/
+
+.vts_token

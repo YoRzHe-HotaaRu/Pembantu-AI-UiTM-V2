@@ -1454,6 +1454,77 @@ p {
     color: var(--text-secondary);
 }
 
+/* VTS Toggle Container */
+.vts-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.vts-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.vts-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.vts-desc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* VTS Status */
+.vts-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    margin-top: 0.5rem;
+}
+
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--text-muted);
+}
+
+.status-indicator.connected {
+    background-color: #27ae60;
+    box-shadow: 0 0 6px rgba(39, 174, 96, 0.5);
+}
+
+.status-indicator.connecting {
+    background-color: var(--accent-tertiary);
+    animation: pulse 1.5s infinite;
+}
+
+.status-indicator.disconnected {
+    background-color: var(--text-muted);
+}
+
+.status-indicator.error {
+    background-color: var(--accent-primary);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.status-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
 /* Microphone Select */
 .mic-select {
     width: 100%;

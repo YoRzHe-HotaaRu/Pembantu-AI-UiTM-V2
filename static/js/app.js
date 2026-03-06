@@ -29,6 +29,15 @@ const state = {
         format: 'webm'
     },
 
+    // VTube Studio state
+    vts: {
+        enabled: localStorage.getItem('uitm-vts-enabled') === 'true',
+        connected: false,
+        connecting: false,
+        lipSyncData: null,
+        currentAudio: null
+    },
+
     // Settings modal state
     settings: {
         isOpen: false
@@ -50,6 +59,9 @@ const elements = {
     microphoneSelect: document.getElementById('microphoneSelect'),
     testMicBtn: document.getElementById('testMicBtn'),
     ttsToggle: document.getElementById('ttsToggle'),
+    vtsToggle: document.getElementById('vtsToggle'),
+    vtsStatus: document.getElementById('vtsStatus'),
+    vtsSettingsSection: document.getElementById('vtsSettingsSection'),
     html: document.documentElement,
     
     // Panels
@@ -120,6 +132,10 @@ function initializeApp() {
 
     // Initialize audio devices
     initializeAudioDevices();
+
+    // Initialize VTS (VTube Studio)
+    initializeVTS();
+    checkVTSStatus();
 }
 
 // ========================================
@@ -765,12 +781,18 @@ async function playTTS(text) {
         .substring(0, 4000); // Limit to 4000 chars
     
     try {
+        // Check if VTS is enabled and connected
+        const includeLipSync = state.vts.enabled && state.vts.connected;
+        
         const response = await fetch('/tts', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ text: cleanText })
+            body: JSON.stringify({
+                text: cleanText,
+                include_lip_sync: includeLipSync
+            })
         });
         
         if (!response.ok) {
@@ -778,22 +800,253 @@ async function playTTS(text) {
             return;
         }
         
-        // Get audio blob and play
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
+        // Check if response is JSON (with lip sync) or audio blob
+        const contentType = response.headers.get('content-type');
         
-        audio.play().catch(err => {
-            console.error('Audio playback failed:', err);
-        });
-        
-        // Cleanup URL after playback
-        audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-        };
+        if (contentType && contentType.includes('application/json')) {
+            // Response includes lip sync data
+            const data = await response.json();
+            
+            // Decode base64 audio
+            const audioBytes = atob(data.audio);
+            const audioArray = new Uint8Array(audioBytes.length);
+            for (let i = 0; i < audioBytes.length; i++) {
+                audioArray[i] = audioBytes.charCodeAt(i);
+            }
+            
+            const audioBlob = new Blob([audioArray], { type: 'audio/mpeg' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            // Store lip sync data
+            if (data.lip_sync && data.lip_sync.length > 0) {
+                state.vts.lipSyncData = data.lip_sync;
+                state.vts.currentAudio = audio;
+                
+                // Start lip sync playback
+                playLipSync(data.lip_sync, audio);
+            }
+            
+            audio.play().catch(err => {
+                console.error('Audio playback failed:', err);
+            });
+            
+            // Cleanup URL after playback
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+                state.vts.lipSyncData = null;
+                state.vts.currentAudio = null;
+            };
+        } else {
+            // Response is audio only
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            audio.play().catch(err => {
+                console.error('Audio playback failed:', err);
+            });
+            
+            // Cleanup URL after playback
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+            };
+        }
         
     } catch (error) {
         console.error('TTS error:', error);
+    }
+}
+
+// ========================================
+// VTS MODULE (VTube Studio)
+// ========================================
+
+async function initializeVTS() {
+    // Check if VTS section exists (indicates VTS is enabled on backend)
+    if (!elements.vtsSettingsSection) {
+        return;
+    }
+    
+    // Update toggle state
+    if (elements.vtsToggle) {
+        elements.vtsToggle.checked = state.vts.enabled;
+        elements.vtsToggle.addEventListener('change', handleVTSToggle);
+    }
+    
+    // If VTS was enabled, try to connect
+    if (state.vts.enabled) {
+        await connectVTS();
+    }
+}
+
+async function handleVTSToggle(event) {
+    const enabled = event.target.checked;
+    state.vts.enabled = enabled;
+    localStorage.setItem('uitm-vts-enabled', enabled);
+    
+    if (enabled) {
+        await connectVTS();
+    } else {
+        await disconnectVTS();
+    }
+}
+
+async function connectVTS() {
+    if (state.vts.connecting || state.vts.connected) return;
+    
+    state.vts.connecting = true;
+    updateVTSStatus('connecting');
+    
+    try {
+        const response = await fetch('/vts/connect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            state.vts.connected = true;
+            updateVTSStatus('connected');
+            console.log('[VTS] Connected to VTube Studio');
+        } else {
+            state.vts.connected = false;
+            updateVTSStatus('error', data.message || 'Connection failed');
+            console.error('[VTS] Connection failed:', data.message);
+        }
+    } catch (error) {
+        state.vts.connected = false;
+        updateVTSStatus('error', 'Connection error');
+        console.error('[VTS] Connection error:', error);
+    } finally {
+        state.vts.connecting = false;
+    }
+}
+
+async function disconnectVTS() {
+    if (!state.vts.connected) return;
+    
+    try {
+        await fetch('/vts/disconnect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        state.vts.connected = false;
+        updateVTSStatus('disconnected');
+        console.log('[VTS] Disconnected from VTube Studio');
+    } catch (error) {
+        console.error('[VTS] Disconnect error:', error);
+    }
+}
+
+function updateVTSStatus(status, message = null) {
+    if (!elements.vtsStatus) return;
+    
+    const indicator = elements.vtsStatus.querySelector('.status-indicator');
+    const text = elements.vtsStatus.querySelector('.status-text');
+    
+    if (!indicator || !text) return;
+    
+    // Remove all status classes
+    indicator.classList.remove('connected', 'disconnected', 'connecting', 'error');
+    
+    switch (status) {
+        case 'connected':
+            indicator.classList.add('connected');
+            text.textContent = 'Disambung';
+            break;
+        case 'connecting':
+            indicator.classList.add('connecting');
+            text.textContent = 'Menyambung...';
+            break;
+        case 'error':
+            indicator.classList.add('error');
+            text.textContent = message || 'Ralat';
+            break;
+        default:
+            indicator.classList.add('disconnected');
+            text.textContent = 'Tidak disambung';
+    }
+}
+
+async function playLipSync(lipSyncData, audio) {
+    if (!lipSyncData || lipSyncData.length === 0) return;
+    if (!state.vts.connected) return;
+    
+    // Send the entire lip sync data to backend to play
+    // This ensures proper timing and synchronization
+    try {
+        await fetch('/vts/play_lip_sync', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ lip_sync: lipSyncData })
+        });
+    } catch (error) {
+        console.error('[VTS] Error playing lip sync:', error);
+    }
+}
+
+async function sendVTSMouthValue(value) {
+    // Send individual mouth value to VTS via backend
+    if (!state.vts.connected) return;
+    
+    try {
+        await fetch('/vts/set_mouth', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ value: value })
+        });
+    } catch (error) {
+        console.error('[VTS] Error setting mouth:', error);
+    }
+}
+
+// Check VTS status on page load
+async function checkVTSStatus() {
+    if (!elements.vtsSettingsSection) return;
+    
+    try {
+        const response = await fetch('/vts/status');
+        const data = await response.json();
+        
+        if (data.enabled) {
+            // Backend has VTS enabled, sync frontend state
+            // If user previously enabled VTS in frontend, keep that preference
+            const userEnabledVTS = localStorage.getItem('uitm-vts-enabled') === 'true';
+            
+            // Update toggle to reflect user preference
+            if (elements.vtsToggle) {
+                elements.vtsToggle.checked = userEnabledVTS;
+            }
+            
+            // Update state
+            state.vts.enabled = userEnabledVTS;
+            state.vts.connected = data.connected;
+            
+            updateVTSStatus(data.connected ? 'connected' : 'disconnected');
+            
+            // If user had VTS enabled, try to connect
+            if (userEnabledVTS && !data.connected) {
+                connectVTS();
+            }
+        } else {
+            // VTS not enabled on backend
+            if (elements.vtsSettingsSection) {
+                elements.vtsSettingsSection.style.display = 'none';
+            }
+        }
+    } catch (error) {
+        console.log('[VTS] Status check failed:', error);
     }
 }
 
