@@ -19,6 +19,15 @@ from rag.image_handler import ImageHandler
 # Import VTS system
 from vts import VTSConnector, LipSyncAnalyzer, ExpressionMapper, AudioConverter
 from vts import get_idle_animator, get_gesture_controller, get_player
+from vts import get_parallel_analyzer
+
+# Import optimized TTS
+try:
+    from tts_optimized import OptimizedMinimaxTTS, get_tts_instance, TTSChunk
+    TTS_OPTIMIZED_AVAILABLE = True
+except ImportError:
+    TTS_OPTIMIZED_AVAILABLE = False
+    print("[TTS] Optimized TTS module not available, using fallback")
 
 # Load environment variables
 load_dotenv()
@@ -687,6 +696,109 @@ def text_to_speech():
     except Exception as e:
         print(f"TTS unexpected error: {str(e)}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@app.route('/tts-optimized', methods=['POST'])
+def text_to_speech_optimized():
+    """
+    Optimized TTS endpoint with streaming, caching, and parallel processing.
+    Returns audio with lip sync data using optimized pipeline.
+    """
+    if not MINIMAX_API_KEY:
+        return jsonify({'error': 'Minimax API key not configured'}), 500
+    
+    if not TTS_OPTIMIZED_AVAILABLE:
+        return jsonify({'error': 'Optimized TTS not available'}), 500
+    
+    data = request.get_json()
+    text = data.get('text', '')
+    include_lip_sync = data.get('include_lip_sync', False) and VTS_ENABLED
+    use_streaming = data.get('streaming', True)
+    
+    if not text:
+        return jsonify({'error': 'Text is required'}), 400
+    
+    # Limit text length
+    if len(text) > 10000:
+        text = text[:9997] + '...'
+    
+    try:
+        import time
+        start_time = time.time()
+        
+        # Get optimized TTS instance
+        tts = get_tts_instance(
+            api_key=MINIMAX_API_KEY,
+            model=MINIMAX_TTS_MODEL,
+            voice_id=MINIMAX_TTS_VOICE,
+            language_boost=MINIMAX_TTS_LANGUAGE
+        )
+        
+        all_audio = b""
+        all_lip_sync = []
+        chunk_index = 0
+        
+        # Process TTS with streaming
+        async def process_tts():
+            nonlocal all_audio, all_lip_sync, chunk_index
+            
+            async for chunk in tts.generate_audio_streaming(text):
+                all_audio += chunk.audio_bytes
+                
+                # Process lip sync for this chunk in parallel
+                if include_lip_sync and vts_audio_converter and vts_audio_converter.is_available:
+                    try:
+                        # Convert chunk to WAV
+                        wav_bytes = vts_audio_converter.convert_mp3_to_wav(chunk.audio_bytes)
+                        if wav_bytes:
+                            # Use parallel analyzer
+                            parallel_analyzer = get_parallel_analyzer()
+                            lip_sync = await parallel_analyzer.analyze_wav_bytes_parallel(wav_bytes)
+                            
+                            # Adjust timestamps for chunk position
+                            offset = chunk_index * (len(lip_sync) / 30.0) if lip_sync else 0
+                            adjusted_lip_sync = [(t + offset, v) for t, v in lip_sync]
+                            all_lip_sync.extend(adjusted_lip_sync)
+                    except Exception as e:
+                        print(f"[TTS-Optimized] Lip sync error for chunk: {e}")
+                
+                chunk_index += 1
+        
+        # Run async processing
+        asyncio.run(process_tts())
+        
+        # Get audio duration
+        duration = 0.0
+        if vts_audio_converter:
+            duration = vts_audio_converter.get_audio_duration(all_audio, 'mp3') or 0.0
+        
+        # Get expression
+        expression = None
+        if vts_expression_mapper:
+            expression = vts_expression_mapper.extract_emotion(text)
+        
+        elapsed = time.time() - start_time
+        print(f"[TTS-Optimized] Generated in {elapsed:.2f}s, {len(all_audio)} bytes, {len(all_lip_sync)} lip sync frames")
+        
+        # Return response
+        audio_base64 = base64.b64encode(all_audio).decode('utf-8')
+        
+        return jsonify({
+            'audio': audio_base64,
+            'audio_format': 'mp3',
+            'lip_sync': all_lip_sync,
+            'duration': duration,
+            'expression': expression,
+            'vts_enabled': VTS_ENABLED,
+            'processing_time': elapsed,
+            'optimized': True
+        })
+        
+    except Exception as e:
+        print(f"[TTS-Optimized] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/vts/status', methods=['GET'])

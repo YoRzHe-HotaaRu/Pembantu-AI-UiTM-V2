@@ -10,6 +10,7 @@ from .expressions import ExpressionMapper, get_mapper
 from .audio_converter import AudioConverter
 from .idle_animator import IdleAnimator, IdleConfig, get_idle_animator
 from .gesture_controller import GestureController, GestureConfig, EmotionType, get_gesture_controller, detect_emotion_from_text
+from .lip_sync_parallel import ParallelLipSyncAnalyzer, get_parallel_analyzer
 
 __all__ = [
     'VTSConnector',
@@ -28,5 +29,7 @@ __all__ = [
     'GestureConfig',
     'EmotionType',
     'get_gesture_controller',
-    'detect_emotion_from_text'
+    'detect_emotion_from_text',
+    'ParallelLipSyncAnalyzer',
+    'get_parallel_analyzer'
 ]
