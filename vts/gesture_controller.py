@@ -29,42 +29,39 @@ class GestureConfig:
     """Configuration for natural gesture animations."""
 
     # --- Organic drift (slow wandering baseline) ---
-    drift_amplitude: float = 7.0         # Max degrees for slow drift
-    drift_speed: float = 0.18            # Very slow wandering Hz
+    drift_amplitude: float = 8.0         # Max degrees for slow drift
+    drift_speed: float = 0.2             # Slow wandering Hz
 
-    # --- Speech rhythm ---
-    rhythm_amplitude: float = 5.0        # Talking rhythm range (degrees)
-    rhythm_base_speed: float = 1.8       # Base speech rhythm Hz
-    rhythm_variation: float = 0.3        # Random speed variation ±30%
+    # --- Speech rhythm (the "talking sway") ---
+    rhythm_amplitude_y: float = 6.0      # Up-down bobbing (degrees)
+    rhythm_amplitude_x: float = 4.0      # Left-right sway (degrees)
+    rhythm_amplitude_z: float = 3.0      # Lean/tilt sway (degrees)
+    rhythm_base_speed: float = 2.2       # Base speech rhythm Hz
 
-    # --- Emphasis gestures ---
+    # --- Emphasis gestures (nods, tilts on punctuation) ---
     emphasis_enabled: bool = True
-    emphasis_nod_strength: float = 10.0  # Noticeable nod (degrees)
-    emphasis_tilt_strength: float = 7.0  # Noticeable tilt (degrees)
-    emphasis_easing_speed: float = 8.0   # Easing rate for emphasis
-
-    # --- Body follow ---
-    body_follow_ratio: float = 0.6       # Body follows head at 60%
-    body_phase_delay: float = 0.15       # Body lags head by 150ms
+    emphasis_nod_strength: float = 12.0  # Strong nod (degrees)
+    emphasis_tilt_strength: float = 8.0  # Strong tilt (degrees)
+    emphasis_easing_speed: float = 10.0  # How fast emphasis snaps in/out
+    emphasis_tilt_chance: float = 0.4    # Chance of tilt on emphasis (0-1)
 
     # --- Micro-expressions ---
-    brow_emphasis_strength: float = 0.55 # Brow raise on emphasis (0-1)
+    brow_emphasis_strength: float = 0.6  # Brow raise on emphasis (0-1)
     eye_drift_amplitude: float = 0.3     # Eye movement range
-    eye_drift_speed: float = 0.45        # Eye drift Hz
+    eye_drift_speed: float = 0.5         # Eye drift Hz
 
-    # --- Smoothing / transitions ---
-    transition_speed: float = 0.07       # Easing factor per frame (lower = smoother)
-    start_ramp_duration: float = 0.8     # Seconds to ramp up at speech start
-    stop_ramp_duration: float = 0.6      # Seconds to ramp down at speech end
+    # --- Transitions ---
+    start_ramp_duration: float = 0.5     # Seconds to ramp up at speech start
+    stop_ramp_duration: float = 0.5      # Seconds to ramp down at speech end
+
+    # --- Amplitude envelope (intensity varies over time) ---
+    envelope_speed: float = 0.12         # Hz for amplitude modulation
+    envelope_min: float = 0.6            # Minimum amplitude multiplier
+    envelope_max: float = 1.0            # Maximum amplitude multiplier
 
     # --- Engagement tracking ---
     engagement_enabled: bool = True
     engagement_range: float = 10.0
-
-    # --- Amplitude envelope ---
-    envelope_speed: float = 0.1          # Hz for amplitude modulation
-    envelope_min: float = 0.5            # Minimum amplitude multiplier
-    envelope_max: float = 1.0            # Maximum amplitude multiplier
 
     # --- Emotion-based positions ---
     emotion_positions: Dict[EmotionType, Dict[str, float]] = None
@@ -73,10 +70,10 @@ class GestureConfig:
         if self.emotion_positions is None:
             self.emotion_positions = {
                 EmotionType.NEUTRAL: {"x": 0, "y": 0, "z": 0},
-                EmotionType.HAPPY: {"x": 0, "y": 5, "z": 0},
-                EmotionType.SAD: {"x": 0, "y": -8, "z": 0},
+                EmotionType.HAPPY: {"x": 0, "y": 5, "z": 3},
+                EmotionType.SAD: {"x": 0, "y": -8, "z": -3},
                 EmotionType.EXCITED: {"x": 0, "y": 3, "z": 5},
-                EmotionType.THINKING: {"x": 0, "y": 2, "z": -8},
+                EmotionType.THINKING: {"x": -5, "y": 3, "z": -8},
                 EmotionType.SURPRISED: {"x": 0, "y": -5, "z": 0},
                 EmotionType.CONFUSED: {"x": 5, "y": 3, "z": -5},
             }
@@ -86,31 +83,21 @@ class GestureConfig:
 _PHI = 1.6180339887       # Golden ratio
 _SQRT2 = 1.4142135624     # √2
 _SQRT3 = 1.7320508076     # √3
-_SQRT5 = 2.2360679775     # √5
 
 
 def _organic_noise(t: float, base_speed: float, amplitude: float = 1.0) -> float:
     """
     Generate organic, non-repeating noise using layered sine waves
-    at irrational frequency ratios. Produces motion that feels natural
-    rather than robotically periodic.
-
-    Args:
-        t: Time in seconds
-        base_speed: Base frequency in Hz
-        amplitude: Output amplitude multiplier
-
-    Returns:
-        Noise value in range [-amplitude, +amplitude] (approximately)
+    at irrational frequency ratios. Produces motion that feels natural.
     """
     # Layer 1: Primary motion
-    v = math.sin(t * base_speed * 2 * math.pi) * 0.4
+    v = math.sin(t * base_speed * 2.0 * math.pi) * 0.45
     # Layer 2: Golden ratio offset — never aligns with layer 1
-    v += math.sin(t * base_speed * _PHI * 2 * math.pi) * 0.25
+    v += math.sin(t * base_speed * _PHI * 2.0 * math.pi) * 0.28
     # Layer 3: √2 ratio — different phase drift
-    v += math.sin(t * base_speed * _SQRT2 * 2 * math.pi + 0.7) * 0.2
+    v += math.sin(t * base_speed * _SQRT2 * 2.0 * math.pi + 0.7) * 0.18
     # Layer 4: Very slow drift at √3 ratio
-    v += math.sin(t * base_speed * 0.3 * _SQRT3 * 2 * math.pi + 2.1) * 0.15
+    v += math.sin(t * base_speed * 0.3 * _SQRT3 * 2.0 * math.pi + 2.1) * 0.09
 
     return v * amplitude
 
@@ -119,18 +106,15 @@ def _ease_toward(current: float, target: float, speed: float, dt: float) -> floa
     """
     Exponential ease toward a target value. Produces smooth, natural
     transitions instead of instant snaps.
-
-    Args:
-        current: Current value
-        target: Target value
-        speed: Easing speed (higher = faster approach)
-        dt: Delta time in seconds
-
-    Returns:
-        New value eased toward target
     """
     factor = 1.0 - math.exp(-speed * dt)
     return current + (target - current) * factor
+
+
+def _smoothstep(x: float) -> float:
+    """Hermite smoothstep for natural ramp curves."""
+    x = max(0.0, min(1.0, x))
+    return x * x * (3.0 - 2.0 * x)
 
 
 def _amplitude_envelope(t: float, speed: float, min_val: float, max_val: float) -> float:
@@ -138,9 +122,7 @@ def _amplitude_envelope(t: float, speed: float, min_val: float, max_val: float) 
     Slow amplitude modulation so gesture intensity varies over time
     instead of staying constant.
     """
-    # Use organic noise for the envelope itself
     raw = _organic_noise(t, speed, 1.0)
-    # Map from [-1, 1] to [min_val, max_val]
     normalized = (raw + 1.0) * 0.5  # 0 to 1
     return min_val + normalized * (max_val - min_val)
 
@@ -148,22 +130,21 @@ def _amplitude_envelope(t: float, speed: float, min_val: float, max_val: float) 
 class GestureController:
     """
     Manages expressive, natural gestures during speech.
-    Coordinates head, body, brow, and eye movements with organic motion
-    and smooth transitions for lifelike animation.
+    
+    Architecture:
+    - FaceAngleX/Y/Z are the ONLY head/body input parameters needed.
+      VTS natively maps these to BOTH head rotation (ParamAngleX/Y/Z) 
+      AND body rotation (ParamBodyAngleX/Y/Z) via the model's parameter bindings.
+    - Brow and eye parameters are sent separately for micro-expressions.
+    - All values are computed per-frame and sent in a single set_parameters call
+      (merged with lip sync mouth value by LipSyncPlayer).
     """
 
-    # Punctuation that triggers gestures
+    # Punctuation that triggers emphasis gestures
     EMPHASIS_PUNCTUATION = ['!', '?', '.']
     PAUSE_PUNCTUATION = [',', ';', ':']
 
     def __init__(self, vts_connector, config: Optional[GestureConfig] = None):
-        """
-        Initialize the gesture controller.
-
-        Args:
-            vts_connector: VTSConnector instance
-            config: GestureConfig instance (uses defaults if None)
-        """
         self.vts = vts_connector
         self.config = config or GestureConfig()
 
@@ -175,31 +156,24 @@ class GestureController:
         self._speech_stop_time: float = 0
         self._current_text = ""
 
-        # --- Smoothed output values (what actually gets sent to VTS) ---
-        # Head
+        # --- Output values (sent to VTS each frame) ---
         self._head_x = 0.0
         self._head_y = 0.0
         self._head_z = 0.0
-        # Body
-        self._body_x = 0.0
-        self._body_y = 0.0
-        self._body_z = 0.0
-        # Brow
         self._brow_left = 0.0
         self._brow_right = 0.0
-        # Eye
         self._eye_x = 0.0
         self._eye_y = 0.0
 
-        # --- Emphasis state ---
-        self._emphasis_target_y = 0.0   # Target for emphasis nod
-        self._emphasis_target_z = 0.0   # Target for emphasis tilt
-        self._emphasis_brow = 0.0       # Target brow raise for emphasis
-        self._emphasis_current_y = 0.0  # Smoothed emphasis Y
-        self._emphasis_current_z = 0.0  # Smoothed emphasis Z
+        # --- Emphasis state (smoothed toward targets) ---
+        self._emphasis_target_y = 0.0
+        self._emphasis_target_z = 0.0
+        self._emphasis_brow = 0.0
+        self._emphasis_current_y = 0.0
+        self._emphasis_current_z = 0.0
         self._emphasis_brow_current = 0.0
 
-        # --- Emotion base position ---
+        # --- Emotion base position (smoothed) ---
         self._emotion_target_x = 0.0
         self._emotion_target_y = 0.0
         self._emotion_target_z = 0.0
@@ -207,30 +181,24 @@ class GestureController:
         self._emotion_current_y = 0.0
         self._emotion_current_z = 0.0
 
-        # --- Random per-session offsets for variety between speeches ---
+        # --- Random per-session offsets for variety ---
         self._phase_offset_x = 0.0
         self._phase_offset_y = 0.0
         self._phase_offset_z = 0.0
 
-        # --- Activity envelope ---
-        self._activity_level = 0.0  # 0 = idle, 1 = fully talking
+        # --- Sway direction (changes periodically for variety) ---
+        self._sway_direction = 1.0       # Flips between -1 and 1
+        self._next_sway_change = 0.0     # Time of next direction change
 
-        # --- Stored head history for body follow delay ---
-        self._head_history: List[tuple] = []  # (timestamp, x, y, z)
-        self._max_history = 30  # frames of history
+        # --- Activity level ---
+        self._activity_level = 0.0  # 0 = idle, 1 = fully talking
 
         # Tasks
         self._gesture_task: Optional[asyncio.Task] = None
         self._update_task: Optional[asyncio.Task] = None
 
     async def start_speaking(self, text: str = "", emotion: EmotionType = EmotionType.NEUTRAL):
-        """
-        Start speaking with natural gestures.
-
-        Args:
-            text: The text being spoken (for punctuation analysis)
-            emotion: Current emotion for base positioning
-        """
+        """Start speaking with natural gestures."""
         self._is_speaking = True
         self._is_ramping_down = False
         self._current_text = text
@@ -241,6 +209,10 @@ class GestureController:
         self._phase_offset_x = random.uniform(0, 100)
         self._phase_offset_y = random.uniform(0, 100)
         self._phase_offset_z = random.uniform(0, 100)
+
+        # Randomize initial sway direction
+        self._sway_direction = random.choice([-1.0, 1.0])
+        self._next_sway_change = random.uniform(2.0, 5.0)
 
         # Set emotion base position
         emotion_pos = self.config.emotion_positions.get(emotion, {})
@@ -265,12 +237,10 @@ class GestureController:
             self._gesture_task.cancel()
             self._gesture_task = None
 
-        # Reset emphasis targets (will ease to zero in update loop)
+        # Reset all targets (will ease to zero via ramp-down)
         self._emphasis_target_y = 0.0
         self._emphasis_target_z = 0.0
         self._emphasis_brow = 0.0
-
-        # Reset emotion targets to neutral
         self._emotion_target_x = 0.0
         self._emotion_target_y = 0.0
         self._emotion_target_z = 0.0
@@ -287,40 +257,36 @@ class GestureController:
 
     async def trigger_emphasis(self, strength: float = 1.0):
         """
-        Trigger a natural emphasis gesture (nod + optional tilt).
+        Trigger a natural emphasis gesture (nod + optional tilt + brow raise).
         Uses smooth easing instead of instant position jumps.
-
-        Args:
-            strength: Gesture strength multiplier (0.0 - 2.0)
         """
         if not self._is_speaking:
             return
 
-        # Add randomized strength variation (±20%)
-        jitter = random.uniform(0.8, 1.2)
+        # Add randomized strength variation (±25%)
+        jitter = random.uniform(0.75, 1.25)
         actual_strength = strength * jitter
 
         # Nod target (downward)
         self._emphasis_target_y = -self.config.emphasis_nod_strength * actual_strength
 
-        # Occasional tilt (30% chance)
-        if random.random() < 0.3:
+        # Tilt on emphasis (configurable chance)
+        if random.random() < self.config.emphasis_tilt_chance:
             direction = random.choice([-1, 1])
-            self._emphasis_target_z = direction * self.config.emphasis_tilt_strength * actual_strength * 0.6
+            self._emphasis_target_z = direction * self.config.emphasis_tilt_strength * actual_strength * 0.7
 
         # Brow raise
         self._emphasis_brow = min(1.0, self.config.brow_emphasis_strength * actual_strength)
 
         # Schedule spring-back with randomized timing
-        delay = random.uniform(0.15, 0.30)
+        delay = random.uniform(0.12, 0.28)
         asyncio.get_event_loop().call_later(delay, self._release_emphasis)
 
     def _release_emphasis(self):
         """Release emphasis targets back to zero (will ease smoothly)."""
         self._emphasis_target_y = 0.0
         self._emphasis_target_z = 0.0
-        # Brow comes back slightly slower
-        asyncio.get_event_loop().call_later(0.1, self._release_brow_emphasis)
+        asyncio.get_event_loop().call_later(0.08, self._release_brow_emphasis)
 
     def _release_brow_emphasis(self):
         """Release brow emphasis."""
@@ -352,33 +318,37 @@ class GestureController:
         """Analyze text and trigger emphasis gestures with natural timing."""
         words = text.split()
         word_index = 0
+        # Track next "random emphasis" interval
+        next_random_emphasis = random.randint(3, 6)
 
         try:
             while self._is_speaking and word_index < len(words):
                 word = words[word_index]
 
-                # Check for emphasis punctuation
+                # Strong emphasis on sentence-ending punctuation
                 if any(p in word for p in self.EMPHASIS_PUNCTUATION):
                     await self.trigger_emphasis(strength=1.0)
-                    # Longer natural pause at sentence breaks
-                    await asyncio.sleep(random.uniform(0.25, 0.45))
+                    await asyncio.sleep(random.uniform(0.20, 0.40))
+                # Medium emphasis on clause-separating punctuation
                 elif any(p in word for p in self.PAUSE_PUNCTUATION):
-                    await self.trigger_emphasis(strength=0.5)
-                    await asyncio.sleep(random.uniform(0.15, 0.30))
-                elif word_index % random.randint(4, 7) == 0:
-                    # Occasional subtle emphasis (varied interval instead of fixed every 5)
-                    await self.trigger_emphasis(strength=random.uniform(0.25, 0.45))
+                    await self.trigger_emphasis(strength=0.6)
+                    await asyncio.sleep(random.uniform(0.12, 0.25))
+                # Periodic subtle emphasis for natural cadence
+                elif word_index == next_random_emphasis:
+                    strength = random.uniform(0.3, 0.6)
+                    await self.trigger_emphasis(strength=strength)
+                    next_random_emphasis = word_index + random.randint(3, 6)
 
                 word_index += 1
-                # Natural word timing with variation instead of fixed 0.2s
-                await asyncio.sleep(random.uniform(0.15, 0.28))
+                # Natural word timing with variation
+                await asyncio.sleep(random.uniform(0.13, 0.25))
         except asyncio.CancelledError:
             pass
 
     def _compute_frame(self, t: float, dt: float):
         """
         Compute all animation channels for one frame.
-        This is the core animation engine.
+        This is the core animation engine — called once per lip sync frame.
 
         Args:
             t: Time elapsed since speech start (seconds)
@@ -386,38 +356,43 @@ class GestureController:
         """
         cfg = self.config
 
-        # --- Activity level (ramp up at start, ramp down at stop) ---
+        # Clamp dt to avoid huge jumps from lag spikes
+        dt = min(dt, 0.1)
+
+        # --- Activity level (smooth ramp up/down) ---
         if self._is_speaking:
-            ramp_progress = min(1.0, t / cfg.start_ramp_duration) if cfg.start_ramp_duration > 0 else 1.0
-            # Smooth ease-in curve
-            target_activity = ramp_progress * ramp_progress * (3.0 - 2.0 * ramp_progress)
+            ramp = min(1.0, t / cfg.start_ramp_duration) if cfg.start_ramp_duration > 0 else 1.0
+            target_activity = _smoothstep(ramp)
         elif self._is_ramping_down:
             time_since_stop = asyncio.get_event_loop().time() - self._speech_stop_time
-            ramp_progress = min(1.0, time_since_stop / cfg.stop_ramp_duration) if cfg.stop_ramp_duration > 0 else 1.0
-            # Smooth ease-out
-            target_activity = 1.0 - (ramp_progress * ramp_progress * (3.0 - 2.0 * ramp_progress))
+            ramp = min(1.0, time_since_stop / cfg.stop_ramp_duration) if cfg.stop_ramp_duration > 0 else 1.0
+            target_activity = 1.0 - _smoothstep(ramp)
             if target_activity < 0.01:
                 self._is_ramping_down = False
                 target_activity = 0.0
         else:
             target_activity = 0.0
 
-        self._activity_level = _ease_toward(self._activity_level, target_activity, 6.0, dt)
+        self._activity_level = _ease_toward(self._activity_level, target_activity, 8.0, dt)
+        activity = self._activity_level
 
-        # --- Amplitude envelope (slow variation of intensity) ---
+        # --- Amplitude envelope (slow intensity variation) ---
         envelope = _amplitude_envelope(t, cfg.envelope_speed, cfg.envelope_min, cfg.envelope_max)
 
-        # --- Organic drift (slow wandering) ---
-        drift_x = _organic_noise(t + self._phase_offset_x, cfg.drift_speed, cfg.drift_amplitude)
-        drift_y = _organic_noise(t + self._phase_offset_y, cfg.drift_speed * 0.8, cfg.drift_amplitude * 0.5)
-        drift_z = _organic_noise(t + self._phase_offset_z, cfg.drift_speed * 0.6, cfg.drift_amplitude * 0.4)
+        # --- Sway direction changes (adds variety to movement pattern) ---
+        if t > self._next_sway_change:
+            self._sway_direction *= -1
+            self._next_sway_change = t + random.uniform(2.5, 6.0)
 
-        # --- Speech rhythm (faster, talk-like bobbing) ---
-        # Add per-session speed variation
-        rhythm_speed = cfg.rhythm_base_speed * (1.0 + random.uniform(-0.02, 0.02))
-        rhythm_y = _organic_noise(t + self._phase_offset_y + 50, rhythm_speed, cfg.rhythm_amplitude)
-        rhythm_x = _organic_noise(t + self._phase_offset_x + 50, rhythm_speed * 0.7, cfg.rhythm_amplitude * 0.3)
-        rhythm_z = _organic_noise(t + self._phase_offset_z + 50, rhythm_speed * 0.5, cfg.rhythm_amplitude * 0.2)
+        # --- Organic drift (slow wandering baseline) ---
+        drift_x = _organic_noise(t + self._phase_offset_x, cfg.drift_speed, cfg.drift_amplitude)
+        drift_y = _organic_noise(t + self._phase_offset_y, cfg.drift_speed * 0.7, cfg.drift_amplitude * 0.4)
+        drift_z = _organic_noise(t + self._phase_offset_z, cfg.drift_speed * 0.5, cfg.drift_amplitude * 0.35) * self._sway_direction
+
+        # --- Speech rhythm (the core "talking sway") ---
+        rhythm_y = _organic_noise(t + self._phase_offset_y + 50.0, cfg.rhythm_base_speed, cfg.rhythm_amplitude_y)
+        rhythm_x = _organic_noise(t + self._phase_offset_x + 50.0, cfg.rhythm_base_speed * 0.6, cfg.rhythm_amplitude_x) * self._sway_direction
+        rhythm_z = _organic_noise(t + self._phase_offset_z + 50.0, cfg.rhythm_base_speed * 0.4, cfg.rhythm_amplitude_z)
 
         # --- Emphasis (smooth eased nod/tilt) ---
         self._emphasis_current_y = _ease_toward(
@@ -430,7 +405,7 @@ class GestureController:
         )
         self._emphasis_brow_current = _ease_toward(
             self._emphasis_brow_current, self._emphasis_brow,
-            cfg.emphasis_easing_speed * 0.7, dt
+            cfg.emphasis_easing_speed * 0.8, dt
         )
 
         # --- Emotion base position (smooth transition) ---
@@ -439,72 +414,35 @@ class GestureController:
         self._emotion_current_z = _ease_toward(self._emotion_current_z, self._emotion_target_z, 3.0, dt)
 
         # --- Combine all head channels ---
-        activity = self._activity_level * envelope
+        # Apply activity level and envelope to organic motion
+        motion_scale = activity * envelope
 
-        target_head_x = (
+        self._head_x = (
             self._emotion_current_x
-            + (drift_x + rhythm_x) * activity
+            + (drift_x + rhythm_x) * motion_scale
         )
-        target_head_y = (
+        self._head_y = (
             self._emotion_current_y
-            + (drift_y + rhythm_y) * activity
-            + self._emphasis_current_y * self._activity_level
+            + (drift_y + rhythm_y) * motion_scale
+            + self._emphasis_current_y * activity
         )
-        target_head_z = (
+        self._head_z = (
             self._emotion_current_z
-            + (drift_z + rhythm_z) * activity
-            + self._emphasis_current_z * self._activity_level
+            + (drift_z + rhythm_z) * motion_scale
+            + self._emphasis_current_z * activity
         )
-
-        # --- Smooth head output ---
-        self._head_x = _ease_toward(self._head_x, target_head_x, 1.0 / max(0.01, cfg.transition_speed), dt)
-        self._head_y = _ease_toward(self._head_y, target_head_y, 1.0 / max(0.01, cfg.transition_speed), dt)
-        self._head_z = _ease_toward(self._head_z, target_head_z, 1.0 / max(0.01, cfg.transition_speed), dt)
-
-        # --- Store head history for body delay ---
-        now = asyncio.get_event_loop().time()
-        self._head_history.append((now, self._head_x, self._head_y, self._head_z))
-        if len(self._head_history) > self._max_history:
-            self._head_history.pop(0)
-
-        # --- Body follow (delayed, dampened copy of head) ---
-        delayed_time = now - cfg.body_phase_delay
-        delayed_x, delayed_y, delayed_z = self._get_delayed_head(delayed_time)
-
-        target_body_x = delayed_x * cfg.body_follow_ratio
-        target_body_y = delayed_y * cfg.body_follow_ratio
-        target_body_z = delayed_z * cfg.body_follow_ratio
-
-        self._body_x = _ease_toward(self._body_x, target_body_x, 8.0, dt)
-        self._body_y = _ease_toward(self._body_y, target_body_y, 8.0, dt)
-        self._body_z = _ease_toward(self._body_z, target_body_z, 8.0, dt)
 
         # --- Brow micro-expressions ---
-        # Subtle organic movement + emphasis raise
-        brow_base = _organic_noise(t + 200, 0.3, 0.1) * activity
+        brow_base = _organic_noise(t + 200.0, 0.35, 0.15) * activity
         target_brow = brow_base + self._emphasis_brow_current
-        self._brow_left = _ease_toward(self._brow_left, target_brow, 6.0, dt)
-        self._brow_right = _ease_toward(self._brow_right, target_brow * 0.9, 5.5, dt)  # Slight asymmetry
+        self._brow_left = _ease_toward(self._brow_left, target_brow, 8.0, dt)
+        self._brow_right = _ease_toward(self._brow_right, target_brow * 0.85, 7.0, dt)
 
         # --- Eye drift ---
-        target_eye_x = _organic_noise(t + 300, cfg.eye_drift_speed, cfg.eye_drift_amplitude) * activity
-        target_eye_y = _organic_noise(t + 400, cfg.eye_drift_speed * 0.8, cfg.eye_drift_amplitude * 0.7) * activity
-        self._eye_x = _ease_toward(self._eye_x, target_eye_x, 5.0, dt)
-        self._eye_y = _ease_toward(self._eye_y, target_eye_y, 5.0, dt)
-
-    def _get_delayed_head(self, target_time: float) -> tuple:
-        """Get head position from history at a delayed timestamp."""
-        if not self._head_history:
-            return 0.0, 0.0, 0.0
-
-        # Find closest historical entry
-        for i in range(len(self._head_history) - 1, -1, -1):
-            t, x, y, z = self._head_history[i]
-            if t <= target_time:
-                return x, y, z
-
-        # If all history is after target, return oldest
-        return self._head_history[0][1], self._head_history[0][2], self._head_history[0][3]
+        target_eye_x = _organic_noise(t + 300.0, cfg.eye_drift_speed, cfg.eye_drift_amplitude) * activity
+        target_eye_y = _organic_noise(t + 400.0, cfg.eye_drift_speed * 0.7, cfg.eye_drift_amplitude * 0.6) * activity
+        self._eye_x = _ease_toward(self._eye_x, target_eye_x, 6.0, dt)
+        self._eye_y = _ease_toward(self._eye_y, target_eye_y, 6.0, dt)
 
     def get_current_position(self) -> Dict[str, float]:
         """Get current head position (backward compatible)."""
@@ -517,37 +455,37 @@ class GestureController:
     def get_all_parameters(self) -> List[Dict]:
         """
         Get all animation parameters for the current frame.
-        Returns VTS-format parameter list including head, body, brow, and eye.
-        This is used by LipSyncPlayer to merge gesture params with mouth params.
+        Returns VTS-format parameter list for head, brow, and eye.
+        
+        NOTE: We only send FaceAngleX/Y/Z for head input. The VTS model's
+        parameter bindings automatically route these to BOTH head rotation
+        (ParamAngleX/Y/Z) AND body rotation (ParamBodyAngleX/Y/Z) — so
+        body follow happens natively through the model, no duplicate params needed.
         """
         params = [
-            # Head rotation
-            {"id": "FaceAngleX", "value": self._head_x, "weight": 1.0},
-            {"id": "FaceAngleY", "value": self._head_y, "weight": 1.0},
-            {"id": "FaceAngleZ", "value": self._head_z, "weight": 1.0},
-            # Body rotation (follows head with delay)
-            {"id": "FaceAngleX", "value": self._body_x, "weight": 0.4},  # Body params use same input but lower weight
-            {"id": "FaceAngleY", "value": self._body_y, "weight": 0.4},
-            {"id": "FaceAngleZ", "value": self._body_z, "weight": 0.4},
+            # Head rotation — VTS routes these to both head AND body via model bindings
+            {"id": "FaceAngleX", "value": float(self._head_x), "weight": 1.0},
+            {"id": "FaceAngleY", "value": float(self._head_y), "weight": 1.0},
+            {"id": "FaceAngleZ", "value": float(self._head_z), "weight": 1.0},
         ]
 
-        # Add brow parameters if there's meaningful movement
+        # Brow parameters (for emphasis raise / micro-expressions)
         if abs(self._brow_left) > 0.01 or abs(self._brow_right) > 0.01:
-            params.extend([
-                {"id": "Brows", "value": self._brow_left, "weight": 0.5},
-            ])
+            params.append(
+                {"id": "Brows", "value": float(self._brow_left), "weight": 0.6}
+            )
 
-        # Add eye drift if there's meaningful movement
+        # Eye drift (subtle gaze movement)
         if abs(self._eye_x) > 0.005 or abs(self._eye_y) > 0.005:
             params.extend([
-                {"id": "EyeRightX", "value": self._eye_x, "weight": 0.3},
-                {"id": "EyeRightY", "value": self._eye_y, "weight": 0.3},
+                {"id": "EyeRightX", "value": float(self._eye_x), "weight": 0.4},
+                {"id": "EyeRightY", "value": float(self._eye_y), "weight": 0.4},
             ])
 
         return params
 
     async def _set_head_position(self, x: float, y: float, z: float):
-        """Send head position to VTube Studio (backward compatible)."""
+        """Send all parameters to VTube Studio (backward compatible)."""
         if not self.vts or not self.vts.is_connected:
             return
 
@@ -570,13 +508,9 @@ class GestureController:
                 now = asyncio.get_event_loop().time()
                 dt = now - last_time
                 last_time = now
-
                 t = now - self._speech_start_time
 
-                # Compute all channels
                 self._compute_frame(t, dt)
-
-                # Send to VTS
                 await self._set_head_position(self._head_x, self._head_y, self._head_z)
 
                 await asyncio.sleep(0.033)  # ~30fps
@@ -588,38 +522,24 @@ class GestureController:
 
 
 def detect_emotion_from_text(text: str) -> EmotionType:
-    """
-    Simple emotion detection from text.
-
-    Args:
-        text: Text to analyze
-
-    Returns:
-        Detected emotion type
-    """
+    """Simple emotion detection from text."""
     text_lower = text.lower()
 
-    # Happy indicators
     if any(word in text_lower for word in ['happy', 'glad', 'great', 'excellent', 'wonderful', 'terbaik', 'gembira', 'senang']):
         return EmotionType.HAPPY
 
-    # Sad indicators
     if any(word in text_lower for word in ['sad', 'sorry', 'unfortunately', 'sedih', 'maaf']):
         return EmotionType.SAD
 
-    # Excited indicators
     if any(word in text_lower for word in ['excited', 'amazing', 'awesome', 'wow', 'hebat', 'mantap']):
         return EmotionType.EXCITED
 
-    # Surprised indicators
     if any(word in text_lower for word in ['surprised', 'shocked', 'wow', 'oh', 'terkejut']):
         return EmotionType.SURPRISED
 
-    # Thinking indicators
     if any(word in text_lower for word in ['think', 'consider', 'perhaps', 'maybe', 'fikir', 'mungkin']):
         return EmotionType.THINKING
 
-    # Confused indicators
     if any(word in text_lower for word in ['confused', 'unclear', 'what', 'huh', 'keliru']):
         return EmotionType.CONFUSED
 
